@@ -1,12 +1,15 @@
+from datetime import datetime
 import pytest
 
 from django.urls import reverse
+from django.core.cache import cache
 from knox.models import AuthToken
 
 from rest_framework import status, exceptions
 
+from Web_Menu_DA.constants import CredentialsChoices
 from registration.business_logic import final_creation
-from registration.models import RegistrationTry, WebMenuUser
+from registration.models import RegistrationTry, WebMenuUser, BanHistory, LoginHistory
 from registration.serializers import CreateRegisterTrySerializer, RegisterConfirmSerializer, WebMenuUserSerializer
 
 
@@ -188,6 +191,7 @@ class TestKnoxView:
         response = authenticated_client_2.get(reverse('user'))
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+
 class TestDjangoRegistrationFormFunction:
 
     @pytest.mark.django_db
@@ -241,3 +245,81 @@ class TestDjangoRegistrationFormFunction:
         assert for_check_user.passport_issuing_authority == validated_data['passport_issuing_authority']
         for_check_reg_try = RegistrationTry.objects.get(id=data_reg_try.id)
         assert for_check_reg_try.confirmation_time is not None
+
+
+class TestRequestTracker:
+
+    @pytest.mark.django_db
+    def test_invalid_login_data_2min_ban(self, api_client, randomizer):
+        time = CredentialsChoices.login.intervals[1] / 60
+        tries = 4
+        for trie in range(tries):
+            response = api_client.post(reverse('login'),
+                                       data={
+                                           'username': randomizer.upp2_data(),
+                                           'password': randomizer.upp2_data(),
+                                       }, format='json')
+        response_json = response.json()
+        delete_cache = cache.delete('127.0.0.1_Other / Other / Other')
+        assert delete_cache is True
+        assert response_json
+        assert response_json['non_field_errors'][0] == f'To many tries. Opportunity is blocked for {time} minutes'
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data_for_check = BanHistory.objects.filter(ip_address='127.0.0.1', user_agent='Other / Other / Other').last()
+        assert data_for_check.credentials_interval == 120
+        data_for_check.delete()
+
+    @pytest.mark.django_db
+    def test_invalid_login_data_set_to_total_ban(self, api_client, randomizer):
+        setups = CredentialsChoices.login
+        instance = BanHistory(
+            account=None,
+            ip_address='127.0.0.1',
+            user_agent='Other / Other / Other',
+            **dict(zip(setups.fields, [setups.intervals[-2], datetime(2024, 4, 16, 8, 32, 32, 784484)])),
+        )
+        instance.save()
+        tries = 3
+        for trie in range(tries):
+            response = api_client.post(reverse('login'),
+                                       data={
+                                           'username': randomizer.upp2_data(),
+                                           'password': randomizer.upp2_data(),
+                                       }, format='json')
+        response_json = response.json()
+        delete_cache = cache.delete('127.0.0.1_Other / Other / Other')
+        assert delete_cache is True
+        assert response_json
+        assert response_json['non_field_errors'][0] == 'To many tries. You are blocked'
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data_for_check_b = BanHistory.objects.filter(ip_address='127.0.0.1', user_agent='Other / Other / Other').last()
+        assert data_for_check_b.credentials_interval == 0
+        data_for_check_b.delete()
+        data_for_check = LoginHistory.objects.filter(ip_address='127.0.0.1', user_agent='Other / Other / Other').last()
+        assert data_for_check.reason_of_reject == 'BAN_credentials'
+        assert data_for_check.result is False
+        data_for_check.delete()
+
+    @pytest.mark.django_db
+    def test_forgot_passwor_check_total_ban(self, api_client, randomizer):
+        setups = CredentialsChoices.login
+        instance = BanHistory(
+            account=None,
+            ip_address='127.0.0.1',
+            user_agent='Other / Other / Other',
+            ban_time=datetime(2024, 4, 16, 8, 32, 32, 784484),
+            **dict(zip(setups.fields, [setups.intervals[-1], datetime(2024, 4, 16, 8, 32, 32, 784484)])),
+        )
+        instance.save()
+        response = api_client.post(reverse('login'),
+                                   data={
+                                       'username': randomizer.upp2_data(),
+                                       'password': randomizer.upp2_data(),
+                                   }, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response_json['non_field_errors'][0] == 'To many tries. You are blocked'
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        data_for_check = BanHistory.objects.filter(ip_address='127.0.0.1', user_agent='Other / Other / Other').last()
+        assert data_for_check.credentials_interval == 0
+        data_for_check.delete()

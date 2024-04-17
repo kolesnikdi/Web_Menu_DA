@@ -20,5 +20,5 @@ RUN pip3 install -r requirements.txt
 # Copy project
 COPY ../.. .
 # Importante comande. Need for entrypoint.sh worck
-CMD ["bash", "-c", "chmod", "+x", "/WEB_menu_docker/Docker/entrypoint.sh"]
-ENTRYPOINT ["/WEB_menu_docker/Docker/entrypoint.sh"]
+#CMD ["bash", "-c", "chmod", "+x", "/WEB_menu_docker/Docker/entrypoint.sh"]
+#ENTRYPOINT ["/WEB_menu_docker/Docker/entrypoint.sh"]

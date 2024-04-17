@@ -71,7 +71,6 @@ class CreateLocationSerializer(serializers.ModelSerializer):
             instance.logo.image.delete()
             instance.logo.image.save(f'{instance.legal_name}.jpg', logo_dict['image'])
         else:
-            instance.logo.image.delete()
             instance.logo = ImageSerializer().update(instance.logo, logo_dict)
         return super().update(instance, validated_data)  # using default method - 'update' for company
 

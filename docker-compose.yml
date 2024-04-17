@@ -4,14 +4,55 @@ services:
     build:
       context: .
       dockerfile: Docker/web/Dockerfile
+    command:
+      - /bin/sh
+      - -c
+      - |
+        python manage.py collectstatic --noinput
+        python manage.py makemigrations
+        python manage.py migrate
+        echo "WEB: Migrations process done ..."
+        echo " "
+        echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        echo "++                                                                                ++"
+        echo "++                      Hatred to russians still not enough!                      ++"
+        echo "++                                                                                ++"
+        echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        echo "++                                                                                ++"
+        echo "++                            ++          +          ++                           ++"
+        echo "++                            ++++       +++       ++++                           ++"
+        echo "++                            ++  +     +++++     +  ++                           ++"
+        echo "++                            ++  ++    +++++    ++  ++                           ++"
+        echo "++                            ++  ++     +++     ++  ++                           ++"
+        echo "++                            ++   ++    +++    ++   ++                           ++"
+        echo "++                            ++   ++    +++    ++   ++                           ++"
+        echo "++                            ++  ++    ++ ++    ++  ++                           ++"
+        echo "++                            +++++    ++   ++    +++++                           ++"
+        echo "++                            ++ +++++++     +++++++ ++                           ++"
+        echo "++                            ++   +++++++++++++++   ++                           ++"
+        echo "++                            ++ ++++  ++++++  ++++ +++                           ++"
+        echo "++                            +++++++++++++++++++++++++                           ++"
+        echo "++                                  ++  ++++  ++                                  ++"
+        echo "++                                   ++++++++++                                   ++"
+        echo "++                                     ++++++                                     ++"
+        echo "++                                       ++                                       ++"
+        echo "++                                                                                ++"
+        echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        echo "from registration.models import WebMenuUser; WebMenuUser.objects.filter(email='1234567899@admin.com').exists() or WebMenuUser.objects.create_superuser(mobile_phone='+380634444444', email='1234567899@admin.com', password='$DJANGO_SUPERUSER_PASSWORD')" | python manage.py shell &&
+        python manage.py upload_notification_list "/WEB_menu_docker/notification_list.xlsx"
+        python manage.py runserver 0.0.0.0:8000
+    #        python manage.py upload_menu "/WEB_menu_docker/menu.xlsx"
     ports:
       - 8000:8000
     volumes:
       - .:/WEB_menu_docker # local directory : container directory
-#    environment:   # To set env data if it are not defined in the /Web_Menu_DA/.env.docker
+#    environment:   # To set env data if it are not defined in the /Web_Menu_DA/.env
 #      - POSTGRES_HOST=db
     env_file:
-      - Docker/.env.docker
+      - .env
     depends_on:
       - db
       - redis_app
@@ -24,7 +65,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     env_file:
-      - Docker/.env.docker
+      - .env
     ports:
       - 5433:5432  # local port : container port
     expose:
@@ -57,10 +98,12 @@ services:
       context: .
       dockerfile: Docker/rabbitmq/Dockerfile
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - 5672:5672
+      - 15672:15672
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    environment:
+      RABBITMQ_DEPRECATION_WARNINGS: "global_qos"
 
   worker: # make task immediately
     container_name: worker
@@ -71,9 +114,11 @@ services:
       - ./:/worker #
     command: celery -A celery_app.celery worker -l info
     env_file:
-      - Docker/.env.docker
+      - .env
     depends_on:
       - rabbitmq
+    environment:
+      - CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=true
 
   beat: # make task on schedule
     container_name: beat
@@ -84,7 +129,7 @@ services:
       - ./:/beat
     command: celery -A celery_app.celery beat -l info
     env_file:
-      - Docker/.env.docker
+      - .env
     depends_on:
       - rabbitmq
 
@@ -93,7 +138,7 @@ services:
     build:
       context: .
       dockerfile: Docker/flower/Dockerfile
-    command: celery --broker=amqp://guest:guest@rabbitmq:5672/ flower --port=5555
+    command: celery --broker=amqp://guest:guest@rabbitmq:5672/
     ports:
       - "5555:5555"
     depends_on:

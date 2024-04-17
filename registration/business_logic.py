@@ -1,30 +1,19 @@
-import os
+import datetime
 
-from django.core.mail import send_mail
-from django.template.loader import render_to_string
-from django.utils import timezone
 from django.conf import settings
 
+from notification_center.models import Notification
 from registration.models import WebMenuUser
+from notification_center.business_logic import send_email
 
 
 def final_send_mail(reg_try):
-    context = {                                             #    """ more data in context to customisation email"""
+    notification_msg = Notification.get_msg(event_name='registration')
+    context = {  # """ more data in context to customisation email"""
         'registration_link': f'{settings.HOST}/registration/{reg_try.code}',
         'registration_link2': f'{settings.HOST}/registration/djangofunction/{reg_try.code}'
     }
-
-    registration_mail = {
-        'subject': 'Web_Menu_DA registration',
-        'message': 'Web_Menu_DA registration',
-        'from_email': os.environ.get('auth_user'),
-        'recipient_list': [reg_try.email],
-        'fail_silently': False,
-        'auth_user': os.environ.get('auth_user'),
-        'auth_password': os.environ.get('email_token'),
-        'html_message': render_to_string('registration_mail.html', context=context),
-    }
-    send_mail(**registration_mail)
+    send_email.delay(notification_msg, [reg_try.email], 'registration_mail.html', context=context)
 
 
 def final_creation(validated_data, reg_try):
@@ -47,6 +36,6 @@ def final_creation(validated_data, reg_try):
 
     user.set_password(validated_data['password'])
     user.save()
-    reg_try.confirmation_time = timezone.now()
+    reg_try.confirmation_time = datetime.datetime.utcnow()
     reg_try.save()
     return user

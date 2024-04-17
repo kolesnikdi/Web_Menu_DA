@@ -39,12 +39,6 @@ class CreateCompanyView(viewsets.ModelViewSet):
         context['user'] = self.request.user
         return super().get_serializer(*args, **kwargs)
 
-    # check password only in one action
-    # def create(self, request, *args, **kwargs):
-    #     serializer = self.get_serializer(data=request.data, context={'user': request.user})
-    #     serializer.is_valid(raise_exception=True)
-    #     return super().create(request, *args, **kwargs)
-
     def perform_create(self, serializer):
         """signs the company by name of user."""
         serializer.save(owner=self.request.user)

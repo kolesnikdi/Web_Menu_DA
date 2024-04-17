@@ -14,7 +14,7 @@ from company.models import Company
 from address.models import Address
 from image.models import Image
 from location.models import Location
-from product.models import Product
+from product.models import Product, Category
 from registration.models import RegistrationTry
 from Web_Menu_DA.constants import Types2FA
 from two_factor_authentication.models import GoogleAuth
@@ -330,3 +330,25 @@ def custom_products_for_filtering(randomizer, custom_location):
     custom_location.product_location.set(product_qs)
 
     return product_qs
+
+
+@pytest.fixture(scope='function')
+def custom_category(randomizer, custom_location):
+    category = Category.add_root(name=randomizer.random_name())
+    category.location.set([custom_location])
+    child = category.add_child(name='child_category')
+    child.location.set([custom_location])
+    category.c_location = custom_location
+    category.child = child
+    return category
+
+
+@pytest.fixture(scope='function')
+def custom_category_2(randomizer, custom_location):
+    category = Category.add_root(name=randomizer.random_name())
+    category.location.set([custom_location])
+    child = category.add_child(name='child')
+    child.location.set([custom_location])
+    category.c_location = custom_location
+    category.child = child
+    return category

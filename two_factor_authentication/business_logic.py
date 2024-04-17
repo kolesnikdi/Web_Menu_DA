@@ -1,17 +1,17 @@
-import os
 import random
 import pyotp
 import logging
 
 from functools import wraps
-from django.core.mail import send_mail
+
+from Web_Menu_DA.custom_utils import RequestTracker
+from notification_center.business_logic import send_email
 from django.core.cache import cache
-from django.template.loader import render_to_string
 from rest_framework import status
 from rest_framework.response import Response
 
-from Web_Menu_DA.settings import CACHE_TIMEOUT_2FA
-from Web_Menu_DA.constants import Types2FA
+from Web_Menu_DA.settings import CACHE_TIMEOUT
+from Web_Menu_DA.constants import Types2FA, CredentialsChoices
 from two_factor_authentication.constants import MSG_TPL
 from two_factor_authentication.models import GoogleAuth
 from two_factor_authentication.serializers import GoogleAuthSerializer
@@ -65,8 +65,7 @@ def enable_2fa(force=False):
         def _decorator(self, request, *args, **kwargs):
             """Checks whether the user is authorised and has Two-factor verification."""
             if request.user.is_authenticated:
-                error_response = perform_2fa_request(request, force)
-                if error_response:
+                if error_response := perform_2fa_request(request, force):
                     return error_response
             return func(self, request, *args, **kwargs)
         return _decorator
@@ -127,7 +126,7 @@ class Base2FA:
         raise NotImplementedError
 
 
-class Cache2FA(Base2FA):
+class Code2FA(Base2FA):
     """This class is intended for followers that use the cache to write 2fa code """
     cache_delay = 300
 
@@ -138,10 +137,10 @@ class Cache2FA(Base2FA):
         return code_2fa
 
 
-class Auth2FAEmail(Cache2FA):
+class Auth2FAEmail(Code2FA):
     """Class which uses Email for checking or performing Two-factor verification"""
     auth2fa_type = 'Email'
-    cache_delay = CACHE_TIMEOUT_2FA.get(auth2fa_type)
+    cache_delay = CACHE_TIMEOUT['2fa'].get(auth2fa_type)
 
     @classmethod
     def _perform_2fa(cls, user):
@@ -153,20 +152,7 @@ class Auth2FAEmail(Cache2FA):
             return cls.already_exists
 
         code_2fa = cls.cache_set(user)
-        context = {
-            'code_2fa': f'{code_2fa}',
-        }
-        confirmation_email = {
-            'subject': 'Personal code for Two-Factor Authentication',
-            'message': 'Personal code for Two-Factor Authentication',
-            'from_email': os.environ.get('auth_user'),
-            'recipient_list': [user.email],
-            'fail_silently': False,
-            'auth_user': os.environ.get('auth_user'),
-            'auth_password': os.environ.get('email_token'),
-            'html_message': render_to_string('2fa_mail.html', context=context),
-        }
-        send_mail(**confirmation_email)
+        send_email.delay('Personal code for Two-Factor Authentication', [user.email], '2fa_mail.html', code_2fa)
 
         return cls._approve_answer()
 
@@ -235,4 +221,8 @@ def perform_2fa_request(request, force=False):
     if not (received_code := request.META.get('HTTP_2FACODE', None)):
         return Auth2FAClass.perform_2fa(user)
 
-    return Auth2FAClass.check_2fa(user, received_code)
+    check_fraud_request = RequestTracker(request, CredentialsChoices.cache_endpoint)
+    reject_2fa_msg = Auth2FAClass.check_2fa(user, received_code)
+    if reject_msg := check_fraud_request.check_duplicates(request.user):
+        reject_2fa_msg = reject_msg
+    return reject_2fa_msg

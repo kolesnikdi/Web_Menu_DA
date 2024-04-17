@@ -1,6 +1,5 @@
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from django.core.cache import cache
 from django_filters.rest_framework import DjangoFilterBackend
 
 from rest_framework.response import Response
@@ -22,17 +21,19 @@ class LocationMenuView(generics.RetrieveAPIView):
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'cost', 'volume']
 
+    def get_queryset(self):
+        code = self.kwargs.get('code', None)
+        return Location.objects.filter(code=code)
+
     @method_decorator(cache_page(TIMEOUT['decorator']))
     def retrieve(self, request, *args, **kwargs):
         """
         Two options for cache operation:
-        1. Using a decorator (full page will be cached). Activate lines 17 or (25) and 38
-        2. Using standard methods. Cache the DB request. Activate lines 39,40,41
+        1. Using a decorator (full page will be cached). Activate lines 16 or (24) and 37
+        2. Using standard methods. Cache the DB request. Activate lines 38,39,40
         and deactivate lines 21 and 34
         """
-        if not (code := self.kwargs.get('code', None)):
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        if not (location := Location.objects.filter(code=code).first()):
+        if not (location := self.get_queryset().first()):
             return Response(status=status.HTTP_404_NOT_FOUND)
         result = LocationMenuSerializer(location).data
         location_products_qs = location.product_location.all()
