@@ -1,8 +1,11 @@
+from django.http import Http404
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from knox.views import LoginView as KnoxLoginView
 
+from Web_Menu_DA.constants import CredentialsChoices
+from Web_Menu_DA.custom_utils import RequestTracker
 from registration.models import RegistrationTry
 from registration.serializers import RegisterConfirmSerializer, CreateRegisterTrySerializer, WebMenuUserSerializer, \
     LoginWebMenuUserSerializer
@@ -24,7 +27,7 @@ class LoginView(KnoxLoginView):
     # authentication_classes = []    # need only if request comes with Header "Authorization"
 
     def post(self, request, format=None):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data
         request.user = user
@@ -57,16 +60,19 @@ class RegisterConfirmView(generics.CreateAPIView):
     lookup_field = 'code'
 
     def post(self, request, *args, **kwargs):
-        reg_try = self.get_object()
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = final_creation(serializer.validated_data, reg_try)
-
-        return Response(  # todo Make variable for different requests (Client, owner, manager)
-            WebMenuUserSerializer(instance=user).data,
-            # todo return variable for different requests (Client, owner, manager)
-            status=status.HTTP_201_CREATED,
-        )
+        try:
+            reg_try = self.get_object()
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            user = final_creation(serializer.validated_data, reg_try)
+            response = Response(WebMenuUserSerializer(instance=user).data, status=status.HTTP_201_CREATED)
+        except RegistrationTry.DoesNotExist:
+            check_fraud_request = RequestTracker(request, CredentialsChoices.registration)
+            if reject_msg := check_fraud_request.check_duplicates():
+                response = Response(reject_msg, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                raise Http404("No %s matches the given query." % self.queryset.model._meta.object_name)
+        return response
 
     def get_queryset(self):
         """Check confirmation_time if it is null then allows to make registration"""

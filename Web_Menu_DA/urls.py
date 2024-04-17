@@ -7,13 +7,14 @@ from registration.views import WebMenuUserViewSet
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('registration/', include('registration.urls')),
+    path('', include('registration.urls')),
     path('company/', include('company.urls')),
     path('location/', include('location.urls')),
     path('product/', include('product.urls')),
     path('menu/', include('menu.urls')),
     path('user/', WebMenuUserViewSet.as_view(), name='user'),
     path('enable2fa/', include('two_factor_authentication.urls')),
+    path('', include('notification_center.urls')),
 ]
 
 if settings.DEBUG:

@@ -1,29 +1,20 @@
 import os
 from dotenv import load_dotenv  # need for correct work os.environ.get()
-
 from pathlib import Path
-
 """Next 2 string need for correct work knox Authentication"""
 from datetime import timedelta
 from rest_framework.settings import api_settings
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 load_dotenv()  # need for correct work os.environ.get()
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-$pso2)*$i!8k#k_y^6j_31c@6@fv66+5)m1@0o3p3ii#p*use3')
+SECRET_KEY = os.environ.get('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+RUN_FROM_LOCAL = True
 
-HOST = os.environ.get('HOST_NAME', 'http://127.0.0.1:8000')
-ALLOWED_HOSTS = [
-    '127.0.0.1',
-]
+HOST = os.environ.get('HOST_NAME')
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 # Application definition
 
@@ -37,12 +28,15 @@ INSTALLED_APPS = [
 
     # libraries
     'rest_framework',
+    'rest_framework.authtoken',
     'django_filters',
     'phonenumber_field',
     'knox',
-    'drf_yasg',
+    'drf_yasg',     # Swagger generator
     'swagger',
-    'redis',
+    'redis_app',
+    'django_celery_beat',
+    'django_user_agents',
 
     # applications
     'company',
@@ -53,10 +47,8 @@ INSTALLED_APPS = [
     'product',
     'menu',
     'two_factor_authentication',
-
-    # 'client',
-    # 'manager',
-    # 'owner',
+    'notification_center',
+    'celery_app',
 ]
 
 AUTH_USER_MODEL = 'registration.WebMenuUser'
@@ -69,6 +61,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django_user_agents.middleware.UserAgentMiddleware',
 ]
 
 ROOT_URLCONF = 'Web_Menu_DA.urls'
@@ -91,21 +84,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'Web_Menu_DA.wsgi.application'
 
-"""If we wont to work with DB from local machine and from docker at the same time we must:
-1. make personal .env file for docker / docker-compose or directly write environment data in docker / docker-compose
-2. we do not need an .env file with data for the local machine. Django does not read this data
-3. the data for ENGINE, NAME, USER must be specified directly
-4. data for HOST must be specified with reference to the internal .env file in the dock
-5. data for PORT must be specified with reference to the internal .env file in the dock. Also, if we changed the
- standard output port (5432), we must specify the new one as an alternative for connection"""
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", 'Postgres_Web_Menu_DA'),
-        "USER": os.environ.get("POSTGRES_USER", 'postgres'),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", 'postgres'),
+        "NAME": os.environ.get("POSTGRES_DB"),
+        "USER": os.environ.get("POSTGRES_USER"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD"),
         "HOST": os.environ.get("POSTGRES_HOST"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5433"),
+        "PORT": os.environ.get("POSTGRES_PORT"),
     }
 }
 
@@ -138,22 +124,20 @@ USE_I18N = True
 
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.1/howto/static-files/
-
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# from knox.auth import TokenAuthentication
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ('knox.auth.TokenAuthentication',),    # KNOX settings
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly',
+    ),
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
     ),
@@ -161,22 +145,22 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
 }
 
-# email settings
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.ukr.net')
-EMAIL_PORT = 2525
-EMAIL_USE_SSL = True
-
 # KNOX settings
 REST_KNOX = {
     'SECURE_HASH_ALGORITHM': 'cryptography.hazmat.primitives.hashes.SHA512',
     'AUTH_TOKEN_CHARACTER_LENGTH': 64,
     'TOKEN_TTL': timedelta(hours=24),
     'USER_SERIALIZER': 'registration.serializers.WebMenuUserSerializer',  # displays all data in the view
-    'TOKEN_LIMIT_PER_USER': 2,
+    'TOKEN_LIMIT_PER_USER': 1,
     'AUTO_REFRESH': True,
-    'MIN_REFRESH_INTERVAL': 360,
+    'MIN_REFRESH_INTERVAL': 11 * 60 * 60,
     'EXPIRY_DATETIME_FORMAT': api_settings.DATETIME_FORMAT,
 }
+
+# email settings
+EMAIL_HOST = os.environ.get('EMAIL_HOST')
+EMAIL_PORT = 2525
+EMAIL_USE_SSL = True
 
 # swagger settings
 """ 
@@ -199,8 +183,7 @@ SWAGGER_SETTINGS = {
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        # 'LOCATION': 'redis://redis_app:6379/1',
-        'LOCATION': 'redis://localhost:6379/1',     # need for work on local machine (menu view)
+        'LOCATION': 'redis://redis_app:6379/0',
         'TIMEOUT': 300,  # default timeout for all chash
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
@@ -212,10 +195,8 @@ CACHE_TIMEOUT = {
     'LocationMenuView': {
         'decorator': 60 * 5,
         'functional': 60 * 2 * 2, },
-}
-
-CACHE_TIMEOUT_2FA = {
-    'Email':  60 * 5,
+    '2fa': {
+        'Email':  60 * 5, },
 }
 
 """
@@ -224,3 +205,13 @@ Redis settings to use Redis db directly. redis_app/redis_app.py
 REDIS_HOST = 'redis_app'
 REDIS_PORT = 6379
 REDIS_DB = 1
+
+# Celery
+CELERY_BROKER_URL = 'amqp://guest:guest@rabbitmq:5672/'
+# CELERY_RESULT_BACKEND = is removed in celery 5.x
+
+# to connect to db from local machine
+if RUN_FROM_LOCAL:
+    DATABASES["default"]["HOST"] = 'localhost'
+    DATABASES["default"]["PORT"] = '5433'
+    CACHES['default']['LOCATION'] = 'redis://localhost:6379/0'

@@ -56,7 +56,7 @@ class CreateCompanySerializer(serializers.ModelSerializer):
                 logo=Image.objects.create(image=None),  # need to create empty logo to set company_id
                 **validated_data,
             )
-            # product.logo.image.save don't work if logo/image None so we need we have to rule out these options
+            # company.logo.image.save don't work if logo/image None so we need to rule out these options
             if logo_data and logo_data.get('image'):
                 company.logo.image.save(f'{company.legal_name}.jpg', logo_data['image'])
         return company
@@ -72,7 +72,6 @@ class CreateCompanySerializer(serializers.ModelSerializer):
             instance.logo.image.delete()
             instance.logo.image.save(f'{instance.legal_name}.jpg', logo_data['image'])
         else:
-            instance.logo.image.delete()
             instance.logo = CompanyImageSerializer().update(instance.logo, logo_data)
         return super().update(instance, validated_data)  # using default method - 'update' for company
 

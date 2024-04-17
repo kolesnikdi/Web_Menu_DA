@@ -1,115 +1,210 @@
 from django.urls import reverse
-
 from rest_framework import status
 
-from product.models import Product
+from product.models import Category
 
 
-class TestValidators:
-
-    def test_location_incorrect(self, custom_location, custom_company_2, randomizer):
-        data = randomizer.product_data()
-        data['company'] = custom_company_2.id
-        data['locations'] = [custom_location.id]
-        response = custom_location.user.post(reverse('product_new-list'), data=data, format='json')
+class TestCreateCategoryView:
+    def test_create_category_valid(self, custom_location, randomizer):
+        data = {'name': 'name', 'location': custom_location.id, 'child_category': 'child_category'}
+        response = custom_location.user.post(reverse('category_new-list'), data=data, format='json')
         response_json = response.json()
         assert response_json
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response_json['company'] == 'Company does not found.'
-
-    def test_location_defunct(self, custom_location, randomizer):
-        data = randomizer.product_data()
-        data['company'] = custom_location.company.id
-        data['locations'] = [custom_location.id + 10]
-        response = custom_location.user.post(reverse('product_new-list'), data=data, format='json')
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        response_json = response.json()
-        assert response_json
-        assert response_json['locations'] == [f'Invalid pk "{custom_location.id + 10}" - object does not exist.']
-
-    def test_company_defunct(self, custom_location, randomizer):
-        data = randomizer.product_data()
-        data['company'] = custom_location.company.id + 10
-        data['locations'] = [custom_location.id]
-        response = custom_location.user.post(reverse('product_new-list'), data=data, format='json')
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        response_json = response.json()
-        assert response_json
-        assert response_json['object'] == 'Location or/and Company does not found.'
-
-
-class TestCreateProductView:
-    def test_create_product_valid(self, custom_location, randomizer):
-        data = randomizer.product_data()
-        data['locations'] = [custom_location.id]
-        data['company'] = custom_location.company.id
-        old_products_ids = list(Product.objects.all().values_list('id', flat=True))  # check if old notes exist
-        # flat=True - makes one list from tuple lists
-        response = custom_location.user.post(reverse('product_new-list'), data=data, format='json')
-        assert response.json()
         assert response.status_code == status.HTTP_201_CREATED
-        # if old notes exist we exclude(id__in=old_products_ids) them from QuerySet
-        product_qs = Product.objects.filter(locations__in=[custom_location.id]).exclude(id__in=old_products_ids)
-        assert product_qs
-        assert product_qs.count() == 1
-        for_check_create_product = product_qs.last()
-        assert for_check_create_product.name == data['name']
-        assert not bool(for_check_create_product.logo.image)  # true if not False=bool((for_check_create_location.logo)
-        assert for_check_create_product.description == data['description']
-        assert for_check_create_product.measure == data['measure']
-        assert str(for_check_create_product.volume) in data['volume']
-        assert str(for_check_create_product.cost)[:4] in data['cost']
-        assert for_check_create_product.created_date is not None
-        assert for_check_create_product.locations
-        assert for_check_create_product.company_id == data['company']
+        data_for_check_root = Category.objects.get(name='name')
+        assert data_for_check_root.name == response_json['name']
+        assert data_for_check_root.location.last().id == response_json['location'][0]['id']
+        data_for_check_child = Category.objects.get(name='child_category')
+        assert data_for_check_child.id == response_json['child_nodes'][0]['id']
 
-    def test_update_product_valid(self, randomizer, custom_product, custom_location):
-        data = randomizer.product_data()
-        data['locations'] = [custom_location.id]
-        data['company'] = custom_location.company.id
-        old_products_ids = list(Product.objects.all().values_list('id', flat=True))  # check if old notes exist
-        assert old_products_ids
-        assert len(old_products_ids) == 1
-        url = reverse('product_new-detail', kwargs={'pk': custom_product.id})
-        response = custom_location.user.put(url, data=data, format='json')
-        assert response.json()
-        assert response.status_code == status.HTTP_200_OK
-        for_check_update_product = Product.objects.get(id=custom_product.id)
-        assert for_check_update_product.name == data['name']
-        assert not bool(for_check_update_product.logo.image)
-        assert for_check_update_product.description == data['description']
-        assert str(for_check_update_product.volume) in data['volume']
-        assert for_check_update_product.measure == data['measure']
-        assert str(for_check_update_product.cost)[:4] in data['cost']
-
-    def test_update_product_another_client(self, authenticated_client, custom_product, randomizer):
-        data = randomizer.product_data()
-        data['locations'] = [custom_product.location_id]
-        data['company'] = custom_product.company.id
-        url = reverse('product_new-detail', kwargs={'pk': custom_product.id})
-        response = authenticated_client.put(url, data=data, format='json')
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()
-
-
-class TestProductViewSet:
-    def test_product_view_owner(self, authenticated_client_2, custom_product):
-        response = authenticated_client_2.get(reverse('product'), format='json')
+    def test_create_new_child_valid(self, custom_category):
+        data = {'name': custom_category.name, 'location': custom_category.c_location.id, 'child_category': 'child'}
+        response = custom_category.c_location.user.post(reverse('category_new-list'), data=data, format='json')
         response_json = response.json()
         assert response_json
-        data = response_json['results'][0]
-        assert response.status_code == status.HTTP_200_OK
-        assert custom_product.company_id == data['company']
-        assert custom_product.locations
-        assert custom_product.name == data['name']
-        assert custom_product.created_date is not None
-        assert custom_product.description == data['description']
-        assert str(data['volume']) in custom_product.volume
-        assert custom_product.measure == data['measure']
-        assert data['cost'][:4] in custom_product.cost
+        assert response.status_code == status.HTTP_201_CREATED
+        data_for_check_root = Category.objects.get(name=data['name'])
+        assert data['child_category'] in [name.name for name in data_for_check_root.get_children()]
 
-    def test_product_view_pk_anoter_user(self, authenticated_client, custom_product):
-        url = reverse('product_new-detail', kwargs={'pk': custom_product.id})
-        response = authenticated_client.get(url, format='json')
+    def test_create_empty_root_valid(self, custom_location):
+        data = {'location': custom_location.id, 'child_category': 'child_category'}
+        response = custom_location.user.post(reverse('category_new-list'), data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['name'] == ['This field is required.']
+
+    def test_create_empty_child_valid(self, custom_location):
+        data = {'name': 'name', 'location': custom_location.id}
+        response = custom_location.user.post(reverse('category_new-list'), data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_201_CREATED
+        data_for_check_root = Category.objects.get(name='name')
+        assert data_for_check_root.name == response_json['name']
+        assert data_for_check_root.location.last().id == response_json['location'][0]['id']
+        assert not data_for_check_root.get_children().exists()
+
+    def test_create_empty_location_valid(self, custom_location):
+        data = {'name': 'name', 'child_category': 'child_category'}
+        response = custom_location.user.post(reverse('category_new-list'), data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['location'] == ['This field is required.']
+
+    def test_create_duplicate_child(self, custom_category):
+        data = {'name': custom_category.name,
+                'location': custom_category.c_location.id,
+                'child_category': 'child_category'}
+        response = custom_category.c_location.user.post(reverse('category_new-list'), data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['error'] == 'Category with the same name already exists at this level.'
+
+    def test_create_duplicate_root(self, custom_category):
+        data = {'name': custom_category.name,
+                'location': custom_category.c_location.id}
+        response = custom_category.c_location.user.post(reverse('category_new-list'), data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['error'] == 'Category with the same name already exists at this level.'
+
+    def test_update_maine_category_valid(self, randomizer, custom_category):
+        data = {'name': randomizer.random_name(), 'location': custom_category.c_location.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_200_OK
+        data_for_check_root = Category.objects.get(id=custom_category.id)
+        assert data_for_check_root.name == data['name']
+
+    def test_update_maine_category_duplicate_root(self, randomizer, custom_category):
+        data = {'name': custom_category.name, 'location': custom_category.c_location.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['error'] == 'Category with the same name already exists at this level.'
+
+    def test_update_empty_root(self, randomizer, custom_category):
+        data = {'location': custom_category.c_location.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['name'] == ['This field is required.']
+
+    def test_update_root_empty_location(self, randomizer, custom_category):
+        data = {'name': custom_category.name}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['location'] == ['This field is required.']
+
+    def test_update_child_category_valid(self, randomizer, custom_category, custom_category_2):
+        data = {'name': randomizer.random_name(),
+                'location': custom_category.c_location.id,
+                'new_root': custom_category_2.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.child.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_200_OK
+        data_for_check_root = Category.objects.get(id=custom_category.child.id)
+        assert data_for_check_root.name == data['name']
+        assert data_for_check_root.get_root() == custom_category_2
+
+    def test_update_child_category_same_root_valid(self, randomizer, custom_category):
+        data = {'name': randomizer.random_name(),
+                'location': custom_category.c_location.id,
+                'new_root': custom_category.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.child.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_200_OK
+        data_for_check_root = Category.objects.get(id=custom_category.child.id)
+        assert data_for_check_root.name == data['name']
+        assert data_for_check_root.get_root() == custom_category
+
+    def test_update_child_category_duplicate(self, randomizer, custom_category):
+        data = {'name': custom_category.child.name,
+                'location': custom_category.c_location.id,
+                'new_root': custom_category.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.child.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['error'] == 'Category with the same name already exists at this level.'
+
+    def test_update_empty_child(self, randomizer, custom_category):
+        data = {'location': custom_category.c_location.id,
+                'new_root': custom_category.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.child.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['name'] == ['This field is required.']
+
+    def test_update_child_empty_location(self, randomizer, custom_category):
+        data = {'name': custom_category.child.name,
+                'new_root': custom_category.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.child.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['location'] == ['This field is required.']
+
+    def test_update_child_empty_new_root(self, randomizer, custom_category):
+        data = {'name': custom_category.child.name,
+                'location': custom_category.c_location.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.child.id})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response_json['new_root'] == ['This field is required.']
+
+    def test_deny_putch_method(self, randomizer, custom_category):
+        data = {'name': randomizer.random_name(), 'location': custom_category.c_location.id}
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.id})
+        response = custom_category.c_location.user.patch(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
+        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert response_json['error'] == 'Method not allowed'
+
+    def test_update_object_does_not_exist(self, randomizer, custom_category):
+        data = {'name': randomizer.random_name(), 'location': custom_category.c_location.id}
+        url = reverse('category_new-detail', kwargs={'pk': 10})
+        response = custom_category.c_location.user.put(url, data=data, format='json')
+        response_json = response.json()
+        assert response_json
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert response.json()
+        assert response_json['detail'] == 'Not found.'
+
+    def test_delete_root(self, randomizer, custom_category):
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.id})
+        response = custom_category.c_location.user.delete(url, format='json')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Category.objects.filter(name=custom_category).exists()
+
+    def test_delete_child(self, randomizer, custom_category):
+        url = reverse('category_new-detail', kwargs={'pk': custom_category.child.id})
+        response = custom_category.c_location.user.delete(url, format='json')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not Category.objects.filter(name=custom_category.child.id).exists()
+
+
+

@@ -22,15 +22,14 @@ class TestValidateMenu:
 
     def test_menu_post(self, api_client, custom_location, custom_product):
         response = api_client.post(reverse('list_menu', args=[custom_location.code]), format='json')
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_menu_patch(self, api_client, custom_location, custom_product):
         response = api_client.patch(reverse('list_menu', args=[custom_location.code]), format='json')
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
-
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
     def test_menu_delete(self, api_client, custom_location, custom_product):
         response = api_client.delete(reverse('list_menu', args=[custom_location.code]), format='json')
-        assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 class TestValidateSearchFilter:
@@ -60,6 +59,7 @@ class TestValidateSearchFilter:
         assert response_json['legal_name']
         assert response_json['address']
         assert len(response_json['products']) == 10
+
 
 class TestValidateOrderingFilter:
     def test_menu_filter_reverse_ordering_positive(self, api_client, custom_location, custom_products_for_filtering):
@@ -163,7 +163,8 @@ class TestValidateRangeFilter:
             reverse('list_menu', args=[custom_location.code]),
             **{'QUERY_STRING': f'range_cost={custom_products_for_filtering[5].cost},'
                                f'{custom_products_for_filtering[7].cost}'
-                               f'&range_volume={custom_products_for_filtering[5]},{custom_products_for_filtering[6]}'},
+                               f'&range_volume={custom_products_for_filtering[5].volume},'
+                               f'{custom_products_for_filtering[6].volume}'},
             format='json',
         )
         response_json = response.json()['products']

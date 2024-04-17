@@ -1,12 +1,12 @@
-Django==4.1.2
+Django>=4.1.13
 djangorestframework==3.14.0
-pygments==2.13.0
+Pygments>=2.15.0
 static3==0.7.0
 pytest-django==4.5.2
 pytest==7.2.0
 django-rest-knox==4.2.0
 django-phonenumber-field[phonenumberslite]
-Pillow==9.4.0
+Pillow>=10.3.0
 django-filter==23.1
 psycopg2-binary==2.9.3
 python-dotenv==1.0.0
@@ -16,3 +16,8 @@ redis==4.5.5
 django-redis==5.2.0
 pyotp==2.8.0
 qrcode==7.4.2
+django_celery_beat==2.5.0
+django-ipware==5.0.2
+openpyxl==3.1.2
+django-treebeard==4.7
+django_user_agents==0.4.0
